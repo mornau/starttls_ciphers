@@ -1,0 +1,81 @@
+#!/bin/bash
+#
+# Enumerate STARTTLS cipher suite support
+
+THISSCRIPT=`basename $0`
+LOGFILE=/tmp/$THISSCRIPT.log
+TEMPFILE=`mktemp $THISSCRIPT_XXXXXXXXXX`
+
+if [ "$1" = '--supported' -o "$1" = '-s' ]
+then 
+  SUPPORTED=1
+  shift
+fi
+
+if [ "$1" = '' -o "$2" = '' ]
+then
+  echo "Error: Missing parameters." >&2
+  echo ""
+  echo "Usage:"
+  echo "  `basename $0` [-s|--supported] <HOSTNAME|IP ADDRESS>:<PORT> <APPLICATION PROTOCOL>"
+  echo ""
+  echo "   Use --supported to only listed cipher suites the server supports."
+  echo ""
+  echo "Example:"
+  echo "  `basename $0` --supported mail.example.org:587 smtp"
+  echo ""
+  exit 1
+fi
+
+# Format: hostname:port ot ip:port
+HOST=`echo $1 | cut -d ':' -f 1`
+PORT=`echo $1 | cut -d ':' -f 2`
+
+# Should be one of the application protocols which openssl supports StartTLS
+# initialization for - review the description of the --starttls option:
+#   openssl --help
+PROTOCOL=$2
+
+if [ -f $LOGFILE ]; then mv -f $LOGFILE $LOGFILE.old; fi
+touch $LOGFILE
+if [ -f $TEMPFILE ]; then rm -f $TEMPFILE; fi
+touch $TEMPFILE
+
+echo "Enumerating $PROTOCOL StartTLS ciphers at $HOST:$PORT" >&2
+echo "Enumerating $PROTOCOL StartTLS ciphers at $HOST:$PORT" >$LOGFILE
+openssl version  >> $LOGFILE
+date -u >> $LOGFILE
+echo "" >&2
+echo "" >$LOGFILE
+
+for cipher in `openssl ciphers | tr ':' ' '`
+do 
+  echo >> $LOGFILE
+  echo '================================================================================' >> $LOGFILE
+  echo >> $LOGFILE
+  echo "Testing $cipher ..." >> $LOGFILE
+  echo >> $LOGFILE
+  echo -e '^D' | openssl s_client -crlf -cipher $cipher -starttls $PROTOCOL -connect $HOST:$PORT > $TEMPFILE 2>&1
+  STATUS=$?
+  cat $TEMPFILE >> $LOGFILE
+  if [ $STATUS = 0 ]
+  then 
+    echo '+ '"$cipher" | tee -a $LOGFILE
+  else 
+    head -n1 $TEMPFILE | grep -Fq ':error:'
+    if [ $? = 0 ]
+    then
+      if [ "$SUPPORTED" != '1' ]
+      then
+        echo '- '"$cipher" | tee -a $LOGFILE
+      fi
+    else
+      echo 'E '"$cipher" | tee -a $LOGFILE
+    fi
+  fi
+done
+
+rm -f $TEMPFILE
+echo "" >&2
+echo "" >$LOGFILE
+echo "Test complete. For details, please review $LOGFILE" >&2
