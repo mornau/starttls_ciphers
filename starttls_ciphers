@@ -36,7 +36,7 @@ print_usage() {
   echo "  $THISSCRIPT [-q|--quiet|-s|--supported] <HOSTNAME|IP_ADDRESS>:<PORT> <PROTOCOL>"
   echo "  $THISSCRIPT <-h|--help|--version>"
   echo ""
-  echo "  Use --quiet to only output ciphers suites with a prefix (no extra text)."
+  echo "  Use --quiet to only output cipher suites with a prefix (no extra text)."
   echo "  Use --supported to only list cipher suites the server supports."
   echo ""
   echo "  <PROTOCOL> is one of the application protocols which your OpenSSL version supports"
@@ -143,7 +143,7 @@ then
   exit 1
 fi
 
-LANG=C openssl s_client --help 2>&1 | grep -q '^ -starttls prot'
+LANG=C openssl s_client --help 2>&1 | grep -Eq '^ -starttls (prot|val)'
 if [ "$?" != '0' ]
 then
   echo "Error: Your version of OpenSSL does not seem to be compatible." >&2
@@ -154,7 +154,7 @@ fi
 
 
 if [ -f "$LOGFILE" ]; then mv -f $LOGFILE $LOGFILE.old; fi
-touch $LOGFILE
+if [ "$QUIET" != '1' ]; then touch $LOGFILE; fi
 if [ -f "$TEMPFILE" ]; then rm -f $TEMPFILE; fi
 touch $TEMPFILE
 
@@ -176,14 +176,14 @@ then
   exit 1
 fi
 
-for CIPHER in `openssl ciphers | tr ':' ' '`
+for CIPHER in `openssl ciphers 'ALL:COMPLEMENTOFALL' | tr ':' ' '`
 do 
   echo >> $LOGFILE
   echo '================================================================================' >> $LOGFILE
   echo >> $LOGFILE
   echo "Testing $CIPHER ..." >> $LOGFILE
   echo >> $LOGFILE
-  echo -e '^D' | openssl s_client -crlf -cipher $CIPHER -starttls $PROTOCOL -connect $HOST:$PORT > $TEMPFILE 2>&1
+  echo -e '^D' | openssl s_client -crlf -tls1_2 -cipher $CIPHER -starttls $PROTOCOL -connect $HOST:$PORT > $TEMPFILE 2>&1
   STATUS=$?
   cat $TEMPFILE >> $LOGFILE
   if [ "$STATUS" = '0' ]
